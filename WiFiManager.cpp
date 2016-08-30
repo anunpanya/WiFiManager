@@ -11,6 +11,7 @@
  **************************************************************/
 
 #include "WiFiManager.h"
+#include <EEPROM.h>
 
 WiFiManagerParameter::WiFiManagerParameter(const char *custom) {
   _id = NULL;
@@ -60,7 +61,8 @@ const char* WiFiManagerParameter::getCustomHTML() {
   return _customHTML;
 }
 
-WiFiManager::WiFiManager() {
+WiFiManager::WiFiManager(int eepromStart) {
+    _eepromStart = eepromStart;
 }
 
 void WiFiManager::addParameter(WiFiManagerParameter *p) {
@@ -133,13 +135,13 @@ boolean WiFiManager::autoConnect(char const *apName, char const *apPassword) {
   DEBUG_WM(F("AutoConnect"));
 
   // read eeprom for ssid and pass
-  //String ssid = getSSID();
-  //String pass = getPassword();
+  String ssid = getSSID();
+  String pass = getPassword();
 
   // attempt to connect; should it fail, fall back to AP
   WiFi.mode(WIFI_STA);
 
-  if (connectWifi("", "") == WL_CONNECTED)   {
+  if (connectWifi(ssid, pass) == WL_CONNECTED)   {
     DEBUG_WM(F("IP Address:"));
     DEBUG_WM(WiFi.localIP());
     //connected
@@ -147,6 +149,83 @@ boolean WiFiManager::autoConnect(char const *apName, char const *apPassword) {
   }
 
   return startConfigPortal(apName, apPassword);
+}
+
+
+String WiFiManager::getSSID() {
+	int _eepromBegin = _eepromStart+0;
+	int _eepromEnd = _eepromStart+32;
+	// DEBUG_WM("EEPROM SSID");
+	// DEBUG_WM("[BEGIN] EEPROM SSID");
+	// DEBUG_WM(_eepromBegin);
+	// DEBUG_WM("[END] EEPROM SSID");
+	// DEBUG_WM(_eepromEnd);
+	
+    DEBUG_WM("Reading EEPROM SSID");
+    _ssid = getEEPROMString(_eepromBegin, _eepromEnd);
+    DEBUG_WM("SSID: ");
+    DEBUG_WM(_ssid);
+    return _ssid;
+}
+
+String WiFiManager::getPassword() {
+	int _eepromBegin = _eepromStart+32;
+	int _eepromEnd = _eepromStart+64;
+	// DEBUG_WM("EEPROM Password");
+	// DEBUG_WM("[BEGIN] EEPROM Password");
+	// DEBUG_WM(_eepromBegin);
+	// DEBUG_WM("[END] EEPROM Password");
+	// DEBUG_WM(_eepromEnd);
+	DEBUG_WM("Reading EEPROM Password");
+	_pass = getEEPROMString(_eepromBegin, _eepromEnd);
+	DEBUG_WM("Password: ");
+	DEBUG_WM(_pass);
+    return _pass;
+}
+
+String WiFiManager::getEEPROMString(int start, int len) {
+    String string = "";
+    for (int i = start; i < len; i++) {
+        // DEBUG_WM(i);
+		// Serial.println(char(EEPROM.read(i)));
+        string += char(EEPROM.read(i));
+    }
+    return string;
+}
+
+void WiFiManager::setEEPROMString(int start, int len, String string) {
+    int si = 0;
+	start+=_eepromStart;
+	len+=_eepromStart;
+	// Serial.print("Clearing eeprom address ");
+	// Serial.print(start);
+	// Serial.print(" to ");
+	// Serial.println(len);
+	
+	for (int i = start; i < len; i++) {
+		EEPROM.write(i, 0);
+	}
+	
+    for (int i = start; i < len; i++) {
+        char c;
+        if(si < string.length()) {
+            c = string[si];
+            // DEBUG_WM("Wrote: ");
+            // DEBUG_WM(c);
+			// Serial.print("Address ");
+			// Serial.print(i);
+			// Serial.print(" : ");
+			// Serial.println(c);
+			EEPROM.write(i, c);
+            
+        } else {
+            c = 0;
+        }
+        si++;
+    }
+	// Serial.println();
+	EEPROM.commit();
+	delay(100);
 }
 
 boolean  WiFiManager::startConfigPortal(char const *apName, char const *apPassword) {
@@ -310,6 +389,8 @@ String WiFiManager::getConfigPortalSSID() {
 void WiFiManager::resetSettings() {
   DEBUG_WM(F("settings invalidated"));
   DEBUG_WM(F("THIS MAY CAUSE AP NOT TO START UP PROPERLY. YOU NEED TO COMMENT IT OUT AFTER ERASING THE DATA."));
+  setEEPROMString(0, 32, "");
+  setEEPROMString(32, 64, "");
   WiFi.disconnect(true);
   //delay(200);
 }
@@ -535,7 +616,17 @@ void WiFiManager::handleWifiSave() {
   //SAVE/connect here
   _ssid = server->arg("s").c_str();
   _pass = server->arg("p").c_str();
-
+  
+  setEEPROMString(0, 32, _ssid);
+  setEEPROMString(32, 64, _pass);
+  
+  // Serial.println("GET");
+  // Serial.println(ssid);
+  // Serial.println(pass);
+  
+  // Serial.println(_ssid);
+  // Serial.println(_pass);
+  
   //parameters
   for (int i = 0; i < _paramsCount; i++) {
     if (_params[i] == NULL) {
@@ -642,7 +733,7 @@ void WiFiManager::handleReset() {
 
   DEBUG_WM(F("Sent reset page"));
   delay(5000);
-  ESP.reset();
+  //ESP.reset();
   delay(2000);
 }
 
@@ -754,4 +845,40 @@ String WiFiManager::toStringIp(IPAddress ip) {
   }
   res += String(((ip >> 8 * 3)) & 0xFF);
   return res;
+}
+
+String WiFiManager::urldecode(const char *src)
+{
+    String decoded = "";
+    char a, b;
+    while (*src) {
+        if ((*src == '%') &&
+            ((a = src[1]) && (b = src[2])) &&
+            (isxdigit(a) && isxdigit(b))) {
+            if (a >= 'a')
+                a -= 'a'-'A';
+            if (a >= 'A')
+                a -= ('A' - 10);
+            else
+                a -= '0';
+            if (b >= 'a')
+                b -= 'a'-'A';
+            if (b >= 'A')
+                b -= ('A' - 10);
+            else
+                b -= '0';
+            
+            decoded += char(16*a+b);
+            src+=3;
+        } else if (*src == '+') {
+            decoded += ' ';
+            *src++;
+        } else {
+            decoded += *src;
+            *src++;
+        }
+    }
+    decoded += '\0';
+    
+    return decoded;
 }

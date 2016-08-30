@@ -14,6 +14,7 @@
 #define WiFiManager_h
 
 #include <ESP8266WiFi.h>
+#include <EEPROM.h>
 #include <ESP8266WebServer.h>
 #include <DNSServer.h>
 #include <memory>
@@ -64,7 +65,7 @@ class WiFiManagerParameter {
 class WiFiManager
 {
   public:
-    WiFiManager();
+    WiFiManager(int eepromStart);
 
     boolean       autoConnect();
     boolean       autoConnect(char const *apName, char const *apPassword = NULL);
@@ -108,6 +109,11 @@ class WiFiManager
     void          setCustomHeadElement(const char* element);
     //if this is true, remove duplicated Access Points - defaut true
     void          setRemoveDuplicateAPs(boolean removeDuplicates);
+	
+    String getSSID();
+    String getPassword();
+    //for conveniennce
+    String urldecode(const char*);
 
   private:
     std::unique_ptr<DNSServer>        dnsServer;
@@ -121,6 +127,7 @@ class WiFiManager
     void          setupConfigPortal();
     void          startWPS();
 
+	int 		  _eepromStart			  = 0;
     const char*   _apName                 = "no-net";
     const char*   _apPassword             = NULL;
     String        _ssid                   = "";
@@ -187,6 +194,9 @@ class WiFiManager
       DEBUG_WM("NO fromString METHOD ON IPAddress, you need ESP8266 core 2.1.0 or newer for Custom IP configuration to work.");
       return false;
     }
+	
+	String getEEPROMString(int start, int len);
+    void setEEPROMString(int start, int len, String string);
 };
 
 #endif
