@@ -138,6 +138,7 @@ void setup() {
 void loop() {
   if(WiFi.status()!=WL_CONNECTED){
       Serial.println("disconnect wifi.");
+      initWiFi();
   }else{
       /* To check if the microgear is still connected */
       if (microgear.connected()) {
@@ -159,6 +160,7 @@ void loop() {
           Serial.println("connection lost, reconnect...");
           if (timer >= 5000) {
               microgear.connect(APPID);
+              timeoutConnection++;
               timer = 0;
           }
           else timer += 100;
@@ -169,7 +171,6 @@ void loop() {
             }
             initWiFi();
           }
-          timeoutConnection++;
           ticker.detach();
       }
   }
